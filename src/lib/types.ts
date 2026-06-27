@@ -22,6 +22,7 @@ export interface Cronograma extends CronogramaMeta {
 
 export interface Usuario {
   usuario: string;
+  email?: string;
   nombre?: string;
   rol?: string;
 }
@@ -42,6 +43,14 @@ export interface AreaAtencionForm {
 export interface LoginResponse {
   token: string;
   usuario: Usuario;
+}
+
+/** Respuesta del primer paso del login: se envió un código al email. */
+export interface LoginChallenge {
+  requiere2fa: true;
+  email: string;
+  expira_en?: number;
+  mensaje?: string;
 }
 
 /** Datos del formulario del editor (antes de enviar a la API). */

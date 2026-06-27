@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sistema de Citas · Cronogramas",
-  description: "Panel de gestión de cronogramas de citas — Hospital Antonio Lorena",
+  title: "Sistema para el Cronograma de Atención de Citas",
+  description: "Sistema para el Cronograma de Atención de Citas — Hospital Antonio Lorena",
   robots: { index: false, follow: false },
 };
 

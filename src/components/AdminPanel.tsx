@@ -101,7 +101,7 @@ export default function AdminPanel({ usuario, onLogout }: Props) {
     <div className="panel">
       <header className="topbar">
         <div className="topbar__brand">
-          <strong>Cronogramas de citas</strong>
+          <strong>Sistema para el Cronograma de Atención de Citas</strong>
           <span>Hospital Antonio Lorena</span>
         </div>
         <div className="topbar__user">

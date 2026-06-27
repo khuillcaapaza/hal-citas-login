@@ -5,6 +5,7 @@ import type {
   Cronograma,
   CronogramaForm,
   CronogramaMeta,
+  LoginChallenge,
   LoginResponse,
   Usuario,
 } from "./types";
@@ -57,12 +58,23 @@ http.interceptors.response.use(
 );
 
 export async function login(
-  usuario: string,
+  email: string,
   password: string
-): Promise<LoginResponse> {
-  const { data } = await http.post<LoginResponse>("/login", {
-    usuario,
+): Promise<LoginChallenge> {
+  const { data } = await http.post<LoginChallenge>("/login", {
+    email,
     password,
+  });
+  return data;
+}
+
+export async function verifyCode(
+  email: string,
+  codigo: string
+): Promise<LoginResponse> {
+  const { data } = await http.post<LoginResponse>("/login/verify", {
+    email,
+    codigo,
   });
   return data;
 }
