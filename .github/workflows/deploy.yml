@@ -1,0 +1,41 @@
+name: Deploy login app (hal-citas-login)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-login
+  cancel-in-progress: false
+
+env:
+  # Web root del subdominio en HestiaCP (usuario haladminweb)
+  PUBLIC_PATH: /home/haladminweb/web/citas.hospitalantoniolorena.gob.pe/public_html
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fijar API_BASE de producción (mismo origen)
+        run: echo 'window.APP_CONFIG = { API_BASE: "/api" };' > config.js
+
+      - name: Configurar clave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Desplegar app estática (preserva la carpeta /api de la otra app)
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/id_deploy -p ${{ secrets.DEPLOY_PORT }}" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'README.md' \
+            --exclude '/api' \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ env.PUBLIC_PATH }}/"
