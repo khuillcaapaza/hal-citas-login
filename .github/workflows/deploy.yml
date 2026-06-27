@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Web root del subdominio en HestiaCP (usuario haladminweb)
-  PUBLIC_PATH: /home/haladminweb/web/citas.hospitalantoniolorena.gob.pe/public_html
+  # Ruta del dominio relativa al home (acceso SFTP-only)
+  REMOTE_DOMAIN_DIR: web/citas.hospitalantoniolorena.gob.pe
 
 jobs:
   deploy:
@@ -23,19 +23,29 @@ jobs:
       - name: Fijar API_BASE de producción (mismo origen)
         run: echo 'window.APP_CONFIG = { API_BASE: "/api" };' > config.js
 
+      - name: Instalar lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
       - name: Configurar clave SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Desplegar app estática (preserva la carpeta /api de la otra app)
+      - name: Desplegar por SFTP (preserva /api)
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
-          rsync -az --delete \
-            -e "ssh -i ~/.ssh/id_deploy -p ${{ secrets.DEPLOY_PORT }}" \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude 'README.md' \
-            --exclude '/api' \
-            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ env.PUBLIC_PATH }}/"
+          KEY="$HOME/.ssh/id_deploy"
+          SSH="ssh -a -x -i $KEY -p $DEPLOY_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          lftp -e "
+            set sftp:connect-program '$SSH';
+            set net:max-retries 2;
+            set net:timeout 20;
+            open -u $DEPLOY_USER, sftp://$DEPLOY_HOST;
+            mkdir -p -f $REMOTE_DOMAIN_DIR/public_html;
+            mirror -R --delete --verbose --no-perms --exclude .git/ --exclude .github/ --exclude README.md --exclude .gitignore --exclude api/ ./ $REMOTE_DOMAIN_DIR/public_html;
+            bye
+          "
