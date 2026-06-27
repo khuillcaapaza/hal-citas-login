@@ -43,10 +43,14 @@ jobs:
           SSH="ssh -a -x -i $KEY -p $DEPLOY_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
           lftp -e "
             set sftp:connect-program '$SSH';
-            set net:max-retries 2;
-            set net:timeout 20;
+            set sftp:auto-confirm yes;
+            set net:max-retries 5;
+            set net:persist-retries 10;
+            set net:timeout 30;
+            set xfer:clobber on;
+            set mirror:parallel-transfer-count 1;
             open -u $DEPLOY_USER, sftp://$DEPLOY_HOST;
             mkdir -p -f $REMOTE_DOMAIN_DIR/public_html;
-            mirror -R --delete --verbose --no-perms --exclude .git/ --exclude .github/ --exclude README.md --exclude .gitignore --exclude api/ ./ $REMOTE_DOMAIN_DIR/public_html;
+            mirror -R --delete --no-perms --ignore-time --verbose --exclude .git/ --exclude .github/ --exclude README.md --exclude .gitignore --exclude api/ ./ $REMOTE_DOMAIN_DIR/public_html;
             bye
           "
