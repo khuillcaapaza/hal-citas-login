@@ -3,6 +3,9 @@ name: Deploy login app (hal-citas-login)
 on:
   push:
     branches: [main]
+  # Corre los tests en pull requests para frenar regresiones antes del merge.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -16,7 +19,30 @@ env:
   NEXT_PUBLIC_API_BASE: /api
 
 jobs:
+  # Ejecuta los tests (con umbral de cobertura 100%) antes de desplegar.
+  # El job de deploy depende de este, asi un test fallido bloquea el deploy.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar tests con cobertura
+        run: npm run test:coverage
+
   deploy:
+    needs: test
+    # Solo despliega en push a main / ejecucion manual, nunca en pull requests.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
