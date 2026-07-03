@@ -60,8 +60,15 @@ jobs:
       - name: Construir (exportación estática)
         run: npm run build
 
-      - name: Instalar lftp
-        run: sudo apt-get update && sudo apt-get install -y lftp
+      - name: Preparar artefacto (zip + extractor)
+        run: |
+          set -euo pipefail
+          ( cd out && zip -qr "$GITHUB_WORKSPACE/site.zip" . )
+          TOKEN="$(openssl rand -hex 16)"
+          echo "::add-mask::$TOKEN"
+          echo "UNPACK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          sed "s/__UNPACK_TOKEN__/$TOKEN/" deploy/unpack.php > unpack.php
+          ls -lh site.zip unpack.php
 
       - name: Configurar clave SSH
         run: |
@@ -69,25 +76,32 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
 
-      - name: Desplegar out/ por SFTP (preserva /api)
+      - name: Subir artefacto por SFTP
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
-          KEY="$HOME/.ssh/id_deploy"
-          SSH="ssh -a -x -i $KEY -p $DEPLOY_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-          lftp -e "
-            set sftp:connect-program '$SSH';
-            set sftp:auto-confirm yes;
-            set net:max-retries 5;
-            set net:persist-retries 10;
-            set net:timeout 30;
-            set xfer:clobber on;
-            set mirror:parallel-transfer-count 1;
-            open -u $DEPLOY_USER, sftp://$DEPLOY_HOST;
-            mkdir -p -f $REMOTE_DOMAIN_DIR/public_html;
-            mirror -R --no-perms --ignore-time --verbose ./out/_next/ $REMOTE_DOMAIN_DIR/public_html/_next;
-            mirror -R --delete --no-perms --ignore-time --verbose --exclude api/ --exclude _next/ ./out/ $REMOTE_DOMAIN_DIR/public_html;
-            bye
-          "
+          set -euo pipefail
+          sftp -i "$HOME/.ssh/id_deploy" -P "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -b - "$DEPLOY_USER@$DEPLOY_HOST" <<EOF
+          -mkdir $REMOTE_DOMAIN_DIR/public_html
+          put site.zip $REMOTE_DOMAIN_DIR/public_html/site.zip
+          put unpack.php $REMOTE_DOMAIN_DIR/public_html/unpack.php
+          EOF
+
+      - name: Extraer en el servidor (PHP) y verificar
+        run: |
+          set -euo pipefail
+          BASE="https://citas.hospitalantoniolorena.gob.pe"
+          echo "Extrayendo site.zip..."
+          curl -k -fsS "$BASE/unpack.php?token=$UNPACK_TOKEN"; echo
+          echo "Verificando assets referenciados por el HTML..."
+          html="$(curl -k -fsSL "$BASE/")"
+          echo "$html" | grep -oE '/_next/static/[^"]+\.(js|css)' | sort -u | while read -r p; do
+            code="$(curl -k -s -o /dev/null -w '%{http_code}' "$BASE$p")"
+            echo "$code $p"
+            [ "$code" = "200" ] || { echo "FALTA $p"; exit 1; }
+          done
+          echo "✅ Deploy verificado"
