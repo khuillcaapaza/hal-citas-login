@@ -210,3 +210,29 @@ describe("llamadas a la API", () => {
     expect(mocks.instance.delete).toHaveBeenCalledWith("/admin/areas/3");
   });
 });
+
+describe("cliente REST genérico (api)", () => {
+  it("api.get devuelve data", async () => {
+    mocks.instance.get.mockResolvedValue({ data: { ok: 1 } });
+    expect(await api.api.get("/x")).toEqual({ ok: 1 });
+    expect(mocks.instance.get).toHaveBeenCalledWith("/x", undefined);
+  });
+
+  it("api.post devuelve data", async () => {
+    mocks.instance.post.mockResolvedValue({ data: { ok: 2 } });
+    expect(await api.api.post("/x", { a: 1 })).toEqual({ ok: 2 });
+    expect(mocks.instance.post).toHaveBeenCalledWith("/x", { a: 1 }, undefined);
+  });
+
+  it("api.put devuelve data", async () => {
+    mocks.instance.put.mockResolvedValue({ data: { ok: 3 } });
+    expect(await api.api.put("/x", { a: 1 })).toEqual({ ok: 3 });
+    expect(mocks.instance.put).toHaveBeenCalledWith("/x", { a: 1 }, undefined);
+  });
+
+  it("api.delete devuelve data", async () => {
+    mocks.instance.delete.mockResolvedValue({ data: { ok: 4 } });
+    expect(await api.api.delete("/x")).toEqual({ ok: 4 });
+    expect(mocks.instance.delete).toHaveBeenCalledWith("/x", undefined);
+  });
+});
