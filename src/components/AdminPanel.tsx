@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AreasManager from "./AreasManager";
 import CronogramaEditor from "./CronogramaEditor";
 import CronogramaList from "./CronogramaList";
 import CronogramaPreview from "./CronogramaPreview";
+import { UsersManagement } from "./UsersManagement";
+import { ChangePasswordForm } from "./ChangePasswordForm";
 import { deleteCronograma, getCronograma } from "@/lib/api";
 import type { Cronograma, CronogramaForm, Usuario } from "@/lib/types";
 import { monthLabel } from "@/lib/utils";
@@ -14,7 +16,7 @@ interface Props {
   onLogout: () => void;
 }
 
-type Seccion = "cronogramas" | "areas";
+type Seccion = "cronogramas" | "areas" | "usuarios" | "settings";
 type Vista = "lista" | "editor" | "preview";
 
 function IconoCalendario() {
@@ -37,6 +39,25 @@ function IconoAreas() {
   );
 }
 
+function IconoUsuarios() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function IconoSeguridad() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  );
+}
+
 export default function AdminPanel({ usuario, onLogout }: Props) {
   const [seccion, setSeccion] = useState<Seccion>("cronogramas");
   const [vista, setVista] = useState<Vista>("lista");
@@ -48,9 +69,32 @@ export default function AdminPanel({ usuario, onLogout }: Props) {
   const [previewData, setPreviewData] = useState<CronogramaForm | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Sincroniza la sección del sidebar con la URL (?view=) mediante History API.
+  const navegar = useCallback((search: string) => {
+    const url = window.location.pathname + (search ? `?${search}` : "");
+    window.history.pushState(null, "", url);
+  }, []);
+
+  const aplicarDesdeUrl = useCallback(() => {
+    const view = new URLSearchParams(window.location.search).get("view");
+    if (view === "areas" || view === "usuarios" || view === "settings") {
+      setSeccion(view);
+    } else {
+      setSeccion("cronogramas");
+      setVista("lista");
+    }
+  }, []);
+
+  useEffect(() => {
+    aplicarDesdeUrl();
+    window.addEventListener("popstate", aplicarDesdeUrl);
+    return () => window.removeEventListener("popstate", aplicarDesdeUrl);
+  }, [aplicarDesdeUrl]);
+
   function irASeccion(s: Seccion) {
     setSeccion(s);
     if (s === "cronogramas") setVista("lista");
+    navegar(s === "cronogramas" ? "" : "view=" + s);
   }
 
   function nuevo() {
@@ -143,11 +187,37 @@ export default function AdminPanel({ usuario, onLogout }: Props) {
               <IconoAreas />
               Áreas de atención
             </button>
+            {usuario.rol === "admin" && (
+              <button
+                type="button"
+                className={
+                  "nav-item" + (seccion === "usuarios" ? " nav-item--activo" : "")
+                }
+                onClick={() => irASeccion("usuarios")}
+              >
+                <IconoUsuarios />
+                Gestión de Usuarios
+              </button>
+            )}
+            <button
+              type="button"
+              className={
+                "nav-item" + (seccion === "settings" ? " nav-item--activo" : "")
+              }
+              onClick={() => irASeccion("settings")}
+            >
+              <IconoSeguridad />
+              Cambiar Contraseña
+            </button>
           </nav>
         </aside>
 
         <main className="contenido">
-          {seccion === "areas" ? (
+          {seccion === "usuarios" ? (
+            <UsersManagement />
+          ) : seccion === "settings" ? (
+            <ChangePasswordForm />
+          ) : seccion === "areas" ? (
             <AreasManager />
           ) : (
             <>

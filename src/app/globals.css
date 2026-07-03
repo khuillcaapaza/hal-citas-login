@@ -84,12 +84,24 @@ body {
   font-family: inherit;
 }
 
+.campo select {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+}
+
 .campo textarea {
   resize: vertical;
 }
 
 .campo input:focus,
-.campo textarea:focus {
+.campo textarea:focus,
+.campo select:focus {
   outline: none;
   border-color: var(--azul);
   box-shadow: 0 0 0 3px rgba(11, 83, 148, 0.15);
@@ -623,4 +635,250 @@ body {
   .cal-blank {
     min-height: 3.2rem;
   }
+}
+
+/* ── Modal genérico ─────────────────────────────────────────────── */
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+  animation: modal-fade 0.15s ease;
+}
+.modal {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.75rem 1.5rem 1.5rem;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modal-pop 0.18s ease;
+}
+.modal__titulo {
+  margin: 0 0 0.4rem;
+  color: #111827;
+  font-size: 1.15rem;
+}
+.modal__texto {
+  margin: 0 0 1.3rem;
+  color: #6b7280;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.modal__acciones {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+}
+.modal__acciones .boton--secundario {
+  margin-top: 0;
+}
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-pop {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ── Paginación ─────────────────────────────────────────────────── */
+.paginacion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+.pag-btn {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.pag-btn:hover:not(:disabled) {
+  border-color: #047857;
+  color: #047857;
+}
+.pag-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pag-btn--activo {
+  background: #047857;
+  border-color: #047857;
+  color: #fff;
+  font-weight: 600;
+}
+.pag-btn--activo:hover {
+  color: #fff;
+}
+
+/* ── Gestión de usuarios: tarjetas ──────────────────────────────── */
+.user-card {
+  gap: 0.15rem;
+}
+.user-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+.user-card__avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.user-card__ident {
+  flex: 1;
+  min-width: 0;
+}
+.user-card__ident h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-card__usuario {
+  display: block;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+.user-card__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid #f3f4f6;
+}
+.user-card__label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #9ca3af;
+}
+.user-card__valor {
+  font-size: 0.88rem;
+  color: #374151;
+  word-break: break-word;
+}
+.user-card .cron-card__acciones {
+  margin-top: 0.9rem;
+}
+.chip--admin {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.user-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.user-estado__punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+.user-estado--on {
+  color: #047857;
+}
+.user-estado--on .user-estado__punto {
+  background: #10b981;
+}
+.user-estado--off {
+  color: #6b7280;
+}
+.user-estado--off .user-estado__punto {
+  background: #9ca3af;
+}
+
+/* Formulario de contraseña */
+.form-estrecho {
+  max-width: 460px;
+}
+.input-clave {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-clave input {
+  flex: 1;
+  padding-right: 5rem;
+}
+.input-clave__toggle {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  color: var(--azul);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+}
+.input-clave__toggle:hover {
+  background: #eef2ff;
+}
+.clave-pista {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+.clave-pista--ok {
+  color: var(--ok);
+}
+.clave-pista--error {
+  color: var(--error);
+}
+
+/* Modal en modo formulario (alineado a la izquierda) */
+.modal--form {
+  max-width: 440px;
+  text-align: left;
+}
+.modal--form .modal__titulo {
+  text-align: left;
+  margin-bottom: 1.1rem;
+}
+.modal--form .campo {
+  margin-bottom: 0.9rem;
+}
+.modal--form .modal__acciones {
+  justify-content: flex-end;
+  margin-top: 1.3rem;
+}
+.modal--form .modal__acciones .boton {
+  width: auto;
+  padding: 0.6rem 1.4rem;
 }
