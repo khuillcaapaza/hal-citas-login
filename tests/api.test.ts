@@ -1,24 +1,16 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock de axios: capturamos la instancia y los interceptores para poder
-// invocarlos directamente y verificar las llamadas HTTP.
+// Mock de axios
 const mocks = vi.hoisted(() => {
   const instance = {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
+    get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(),
     interceptors: {
       request: { use: vi.fn() },
       response: { use: vi.fn() },
     },
   };
-  const axiosDefault = {
-    create: vi.fn(() => instance),
-    post: vi.fn(),
-    delete: vi.fn(),
-  };
-  return { instance, axiosDefault };
+  return { instance, axiosDefault: { create: vi.fn(() => instance) } };
 });
 
 vi.mock("axios", () => ({ default: mocks.axiosDefault }));
@@ -35,68 +27,98 @@ const resCalls = mocks.instance.interceptors.response.use.mock.calls[0] as [
 const onFulfilled = resCalls[0];
 const onRejected = resCalls[1];
 
+function clearCookie() {
+  document.cookie = "hal_token=; path=/; max-age=0";
+}
+function setCookie(value: string) {
+  document.cookie = `hal_token=${encodeURIComponent(value)}; path=/`;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  window.sessionStorage.clear();
+  clearCookie();
 });
 
+// ── Token helpers ────────────────────────────────────────────────────
+
 describe("token helpers", () => {
-  it("set/get/clear sobre sessionStorage", () => {
+  it("getToken devuelve null sin cookie", () => {
     expect(api.getToken()).toBeNull();
-    api.setToken("abc");
-    expect(api.getToken()).toBe("abc");
+  });
+
+  it("getToken lee el valor de la cookie hal_token", () => {
+    setCookie("my-jwt");
+    expect(api.getToken()).toBe("my-jwt");
+  });
+
+  it("clearToken borra la cookie", () => {
+    setCookie("my-jwt");
     api.clearToken();
     expect(api.getToken()).toBeNull();
   });
 
-  it("no fallan en SSR (sin window)", () => {
-    vi.stubGlobal("window", undefined);
+  it("getToken no falla en SSR (sin document)", () => {
+    vi.stubGlobal("document", undefined);
     expect(api.getToken()).toBeNull();
-    expect(() => api.setToken("x")).not.toThrow();
+    vi.unstubAllGlobals();
+  });
+
+  it("clearToken no falla en SSR (sin document)", () => {
+    vi.stubGlobal("document", undefined);
     expect(() => api.clearToken()).not.toThrow();
     vi.unstubAllGlobals();
   });
 });
 
+// ── redirectToAuth ────────────────────────────────────────────────────
+
+describe("redirectToAuth", () => {
+  it("asigna window.location.href a la URL de auth", () => {
+    const original = window.location;
+    delete (window as unknown as Record<string, unknown>).location;
+    window.location = { href: "" } as Location;
+    api.redirectToAuth();
+    expect(window.location.href).toMatch(/localhost|hospitalantoniolorena/);
+    window.location = original;
+  });
+
+  it("no falla en SSR (sin window)", () => {
+    vi.stubGlobal("window", undefined);
+    expect(() => api.redirectToAuth()).not.toThrow();
+    vi.unstubAllGlobals();
+  });
+});
+
+// ── Interceptor de petición ───────────────────────────────────────────
+
 describe("interceptor de petición", () => {
-  it("añade Authorization si hay token", () => {
-    api.setToken("tok");
+  it("añade Authorization si hay cookie", () => {
+    setCookie("tok");
     const cfg = reqInterceptor({ headers: {} });
     expect(cfg.headers.Authorization).toBe("Bearer tok");
   });
 
-  it("no añade Authorization sin token", () => {
+  it("no añade Authorization sin cookie", () => {
     const cfg = reqInterceptor({ headers: {} });
     expect(cfg.headers.Authorization).toBeUndefined();
   });
 });
+
+// ── Interceptor de respuesta ──────────────────────────────────────────
 
 describe("interceptor de respuesta", () => {
   it("deja pasar las respuestas correctas", () => {
     expect(onFulfilled("ok")).toBe("ok");
   });
 
-  it("401 fuera de /login cierra sesión", async () => {
-    api.setToken("tok");
-    const eventSpy = vi.fn();
-    window.addEventListener("auth:logout", eventSpy);
-
+  it("401 dispara auth:logout y rechaza con sesión expirada", async () => {
+    const spy = vi.fn();
+    window.addEventListener("auth:logout", spy);
     await expect(
       onRejected({ response: { status: 401 }, config: { url: "/me" } })
     ).rejects.toThrow("Sesión expirada");
-
-    expect(api.getToken()).toBeNull();
-    expect(eventSpy).toHaveBeenCalled();
-    window.removeEventListener("auth:logout", eventSpy);
-  });
-
-  it("401 en /login se trata como error normal", async () => {
-    await expect(
-      onRejected({
-        response: { status: 401, data: { error: "Credenciales inválidas" } },
-        config: { url: "/login" },
-      })
-    ).rejects.toThrow("Credenciales inválidas");
+    expect(spy).toHaveBeenCalled();
+    window.removeEventListener("auth:logout", spy);
   });
 
   it("usa el mensaje del servidor cuando existe", async () => {
@@ -114,22 +136,9 @@ describe("interceptor de respuesta", () => {
   });
 });
 
+// ── Llamadas a la API ─────────────────────────────────────────────────
+
 describe("llamadas a la API", () => {
-  it("login", async () => {
-    mocks.instance.post.mockResolvedValue({ data: { requiere2fa: true } });
-    await api.login("a@b.test", "pass");
-    expect(mocks.instance.post).toHaveBeenCalledWith("/login", {
-      email: "a@b.test",
-      password: "pass",
-    });
-  });
-
-  it("verifyCode", async () => {
-    mocks.instance.post.mockResolvedValue({ data: { token: "t" } });
-    const r = await api.verifyCode("a@b.test", "123456");
-    expect(r.token).toBe("t");
-  });
-
   it("fetchPerfil", async () => {
     mocks.instance.get.mockResolvedValue({ data: { usuario: { usuario: "admin" } } });
     expect(await api.fetchPerfil()).toEqual({ usuario: "admin" });
@@ -153,17 +162,13 @@ describe("llamadas a la API", () => {
 
   it("createCronograma", async () => {
     mocks.instance.post.mockResolvedValue({ data: {} });
-    await api.createCronograma({
-      mes: "2026-07", titulo: "T", excerpt: "", indicaciones: "", publicado: true, areas: [],
-    });
+    await api.createCronograma({ mes: "2026-07", titulo: "T", excerpt: "", indicaciones: "", publicado: true, areas: [] });
     expect(mocks.instance.post).toHaveBeenCalledWith("/admin/cronogramas", expect.any(Object));
   });
 
   it("updateCronograma", async () => {
     mocks.instance.put.mockResolvedValue({ data: {} });
-    await api.updateCronograma("2026-07", {
-      mes: "2026-07", titulo: "T", excerpt: "", indicaciones: "", publicado: true, areas: [],
-    });
+    await api.updateCronograma("2026-07", { mes: "2026-07", titulo: "T", excerpt: "", indicaciones: "", publicado: true, areas: [] });
     expect(mocks.instance.put).toHaveBeenCalledWith("/admin/cronogramas/2026-07", expect.any(Object));
   });
 
@@ -236,3 +241,4 @@ describe("cliente REST genérico (api)", () => {
     expect(mocks.instance.delete).toHaveBeenCalledWith("/x", undefined);
   });
 });
+
