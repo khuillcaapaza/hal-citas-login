@@ -5,79 +5,58 @@ import type {
   Cronograma,
   CronogramaForm,
   CronogramaMeta,
-  LoginChallenge,
-  LoginResponse,
   Usuario,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
-const TOKEN_KEY = "citas_token";
+const COOKIE_NAME = "hal_token";
+const HAL_AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:3005";
+
+// ── Cookie SSO (escrita por hal-auth) ─────────────────────────────────
 
 export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(TOKEN_KEY, token);
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
 export function clearToken(): void {
-  if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(TOKEN_KEY);
+  if (typeof document === "undefined") return;
+  document.cookie = `${COOKIE_NAME}=; domain=localhost; path=/; max-age=0`;
 }
+
+export function redirectToAuth(): void {
+  if (typeof window === "undefined") return;
+  window.location.href = HAL_AUTH_URL;
+}
+
+// ── Cliente HTTP ──────────────────────────────────────────────────────
+
+// ── Cliente HTTP ──────────────────────────────────────────────────────
 
 const http = axios.create({ baseURL: API_BASE });
 
-// Añade el token a cada petición si existe.
 http.interceptors.request.use((config) => {
   const t = getToken();
   if (t) config.headers.Authorization = `Bearer ${t}`;
   return config;
 });
 
-// Normaliza errores y gestiona la expiración de sesión (401).
 http.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
-    const url: string = error?.config?.url ?? "";
-    // 401 en rutas protegidas => cerrar sesión (no en el propio /login).
-    if (status === 401 && !url.includes("/login")) {
-      clearToken();
+    if (status === 401) {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("auth:logout"));
       }
-      return Promise.reject(new Error("Sesión expirada. Vuelve a entrar."));
+      return Promise.reject(new Error("Sesión expirada. Inicia sesión de nuevo."));
     }
     const msg =
       error?.response?.data?.error || error?.message || "Error en la solicitud";
     return Promise.reject(new Error(msg));
   }
 );
-
-export async function login(
-  email: string,
-  password: string
-): Promise<LoginChallenge> {
-  const { data } = await http.post<LoginChallenge>("/login", {
-    email,
-    password,
-  });
-  return data;
-}
-
-export async function verifyCode(
-  email: string,
-  codigo: string
-): Promise<LoginResponse> {
-  const { data } = await http.post<LoginResponse>("/login/verify", {
-    email,
-    codigo,
-  });
-  return data;
-}
 
 export async function fetchPerfil(): Promise<Usuario> {
   const { data } = await http.get<{ usuario: Usuario }>("/me");

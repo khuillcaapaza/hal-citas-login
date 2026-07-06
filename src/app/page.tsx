@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminPanel from "@/components/AdminPanel";
-import LoginView from "@/components/LoginView";
-import { clearToken, fetchPerfil, getToken } from "@/lib/api";
+import { clearToken, fetchPerfil, getToken, redirectToAuth } from "@/lib/api";
 import type { Usuario } from "@/lib/types";
 
 export default function Page() {
@@ -12,17 +11,27 @@ export default function Page() {
 
   useEffect(() => {
     function onAuthLogout() {
+      clearToken();
       setUsuario(null);
+      redirectToAuth();
     }
     window.addEventListener("auth:logout", onAuthLogout);
 
     (async () => {
-      if (getToken()) {
+      const token = getToken();
+      if (token) {
         try {
           setUsuario(await fetchPerfil());
         } catch {
+          // Token inválido/expirado → redirigir al portal de auth
           clearToken();
+          redirectToAuth();
+          return;
         }
+      } else {
+        // Sin cookie SSO → ir a hal-auth
+        redirectToAuth();
+        return;
       }
       setListo(true);
     })();
@@ -30,18 +39,22 @@ export default function Page() {
     return () => window.removeEventListener("auth:logout", onAuthLogout);
   }, []);
 
+  if (!listo) {
+    return (
+      <div className="shell shell--login">
+        <p style={{ color: "rgba(255,255,255,0.8)" }}>Verificando sesión…</p>
+      </div>
+    );
+  }
+
   function cerrarSesion() {
     clearToken();
-    setUsuario(null);
+    redirectToAuth();
   }
 
   return (
-    <div className={"shell " + (usuario ? "shell--panel" : "shell--login")}>
-      {!listo ? null : usuario ? (
-        <AdminPanel usuario={usuario} onLogout={cerrarSesion} />
-      ) : (
-        <LoginView onSuccess={setUsuario} />
-      )}
+    <div className="shell shell--panel">
+      {usuario && <AdminPanel usuario={usuario} onLogout={cerrarSesion} />}
     </div>
   );
 }

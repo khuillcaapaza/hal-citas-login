@@ -5,8 +5,6 @@ import AreasManager from "./AreasManager";
 import CronogramaEditor from "./CronogramaEditor";
 import CronogramaList from "./CronogramaList";
 import CronogramaPreview from "./CronogramaPreview";
-import { UsersManagement } from "./UsersManagement";
-import { ChangePasswordForm } from "./ChangePasswordForm";
 import { deleteCronograma, getCronograma } from "@/lib/api";
 import type { Cronograma, CronogramaForm, Usuario } from "@/lib/types";
 import { monthLabel } from "@/lib/utils";
@@ -16,7 +14,7 @@ interface Props {
   onLogout: () => void;
 }
 
-type Seccion = "cronogramas" | "areas" | "usuarios" | "settings";
+type Seccion = "cronogramas" | "areas";
 type Vista = "lista" | "editor" | "preview";
 
 function IconoCalendario() {
@@ -77,8 +75,8 @@ export default function AdminPanel({ usuario, onLogout }: Props) {
 
   const aplicarDesdeUrl = useCallback(() => {
     const view = new URLSearchParams(window.location.search).get("view");
-    if (view === "areas" || view === "usuarios" || view === "settings") {
-      setSeccion(view);
+    if (view === "areas") {
+      setSeccion("areas");
     } else {
       setSeccion("cronogramas");
       setVista("lista");
@@ -187,37 +185,11 @@ export default function AdminPanel({ usuario, onLogout }: Props) {
               <IconoAreas />
               Áreas de atención
             </button>
-            {usuario.rol === "admin" && (
-              <button
-                type="button"
-                className={
-                  "nav-item" + (seccion === "usuarios" ? " nav-item--activo" : "")
-                }
-                onClick={() => irASeccion("usuarios")}
-              >
-                <IconoUsuarios />
-                Gestión de Usuarios
-              </button>
-            )}
-            <button
-              type="button"
-              className={
-                "nav-item" + (seccion === "settings" ? " nav-item--activo" : "")
-              }
-              onClick={() => irASeccion("settings")}
-            >
-              <IconoSeguridad />
-              Cambiar Contraseña
-            </button>
           </nav>
         </aside>
 
         <main className="contenido">
-          {seccion === "usuarios" ? (
-            <UsersManagement />
-          ) : seccion === "settings" ? (
-            <ChangePasswordForm />
-          ) : seccion === "areas" ? (
+          {seccion === "areas" ? (
             <AreasManager />
           ) : (
             <>
