@@ -74,12 +74,19 @@ describe("token helpers", () => {
 
 describe("redirectToAuth", () => {
   it("asigna window.location.href a la URL de auth", () => {
+    const hrefs: string[] = [];
     const original = window.location;
-    delete (window as unknown as Record<string, unknown>).location;
-    window.location = { href: "" } as Location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        set href(v: string) {
+          hrefs.push(v);
+        },
+      },
+    });
     api.redirectToAuth();
-    expect(window.location.href).toMatch(/localhost|hospitalantoniolorena/);
-    window.location = original;
+    expect(hrefs[0]).toMatch(/localhost|hospitalantoniolorena/);
+    Object.defineProperty(window, "location", { configurable: true, value: original });
   });
 
   it("no falla en SSR (sin window)", () => {

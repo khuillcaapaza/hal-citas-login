@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminPanel from "@/components/AdminPanel";
-import { clearToken, fetchPerfil, getToken, redirectToAuth } from "@/lib/api";
+import { fetchPerfil, getToken, redirectToAuth } from "@/lib/api";
 import type { Usuario } from "@/lib/types";
 
 export default function Page() {
@@ -11,8 +11,7 @@ export default function Page() {
 
   useEffect(() => {
     function onAuthLogout() {
-      clearToken();
-      setUsuario(null);
+      // La sesión SSO la gestiona hal-auth; aquí solo volvemos al portal.
       redirectToAuth();
     }
     window.addEventListener("auth:logout", onAuthLogout);
@@ -24,7 +23,6 @@ export default function Page() {
           setUsuario(await fetchPerfil());
         } catch {
           // Token inválido/expirado → redirigir al portal de auth
-          clearToken();
           redirectToAuth();
           return;
         }
@@ -48,8 +46,11 @@ export default function Page() {
   }
 
   function cerrarSesion() {
-    clearToken();
-    redirectToAuth();
+    // El logout real lo gestiona hal-auth. Los módulos se abren en una pestaña
+    // nueva desde el portal, así que aquí solo cerramos esa pestaña. Si el
+    // navegador no permite cerrarla (no se abrió por script), volvemos a auth.
+    window.close();
+    window.setTimeout(redirectToAuth, 150);
   }
 
   return (
