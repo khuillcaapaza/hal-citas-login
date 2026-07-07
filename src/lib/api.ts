@@ -10,6 +10,8 @@ import type {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
 const COOKIE_NAME = "hal_token";
+const COOKIE_DOMAIN =
+  process.env.NEXT_PUBLIC_COOKIE_DOMAIN || ".hospitalantoniolorena.gob.pe";
 const HAL_AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:3005";
 
 // ── Cookie SSO (escrita por hal-auth) ─────────────────────────────────
@@ -22,7 +24,13 @@ export function getToken(): string | null {
 
 export function clearToken(): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${COOKIE_NAME}=; domain=localhost; path=/; max-age=0`;
+  const base = `${COOKIE_NAME}=; path=/; max-age=0`;
+  // Borra la cookie en el dominio actual, en el dominio SSO compartido y en
+  // localhost (dev). En prod la cookie vive en .hospitalantoniolorena.gob.pe,
+  // así que sin el dominio correcto el logout no la eliminaba.
+  document.cookie = base;
+  document.cookie = `${base}; domain=${COOKIE_DOMAIN}`;
+  document.cookie = `${base}; domain=localhost`;
 }
 
 export function redirectToAuth(): void {

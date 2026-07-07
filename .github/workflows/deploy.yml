@@ -19,6 +19,8 @@ env:
   NEXT_PUBLIC_API_BASE: /api
   # Portal de login SSO (hal-auth). Sin esto, el build cae a localhost:3005.
   NEXT_PUBLIC_AUTH_URL: https://auth.hospitalantoniolorena.gob.pe
+  # Dominio de la cookie SSO (para poder limpiarla al cerrar sesión).
+  NEXT_PUBLIC_COOKIE_DOMAIN: .hospitalantoniolorena.gob.pe
 
 jobs:
   # Ejecuta los tests (con umbral de cobertura 100%) antes de desplegar.
