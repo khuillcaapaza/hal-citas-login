@@ -137,7 +137,7 @@ export async function deleteArea(id: number): Promise<void> {
   await http.delete(`/admin/areas/${id}`);
 }
 
-// Cliente REST genérico (usado por los hooks de gestión de usuarios).
+// Cliente REST genérico para utilidades internas del módulo.
 export const api = {
   async get(url: string, config?: any) {
     const { data } = await http.get(url, config);
