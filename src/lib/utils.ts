@@ -308,23 +308,44 @@ export function parseHorariosCsv(
 }
 
 /**
- * Genera la plantilla CSV con TODAS las áreas registradas que participan en la
- * carga masiva (activas y con restricción). Pre-rellena `codigo` y `nombre`
- * (columna de referencia, ignorada al importar) para que el usuario solo tenga
- * que completar la fecha (y el horario) de cada fila.
+ * Arreglo de la plantilla: grupos de áreas por día de entrega, en el mismo
+ * orden del rol mensual del hospital. Cada grupo recibe un marcador de fecha
+ * `d1-mm-yyyy`, `d2-mm-yyyy`, … para que el usuario reemplace por fecha todas
+ * las filas de un mismo día con un solo "buscar y reemplazar".
+ */
+const PLANTILLA_GRUPOS: string[][] = [
+  ["CARDIO-RQ", "GINE", "NEONATO", "CIR-PED", "RADIO", "MFR", "ANEST", "ENDO", "INFECTO", "DERMA", "HEMATO", "CIR-PLAS"],
+  ["CIR-CC", "REUMA", "NEUMO", "NEURO", "NUTRI", "NEFRO", "PSIQ"],
+  ["GINE", "NEONATO", "CIR-PED", "RADIO", "ANEST", "CIR-CV", "CIR-GEN", "GASTRO", "CIR-PLAS"],
+  ["INFECTO", "NEUROCIR", "OFTALMO", "TRAUMA", "URO", "URO-ONCO"],
+  ["CARDIO-RQ", "GINE", "NEONATO", "CIR-PED", "RADIO", "ANEST", "ENDO", "REUMA", "NEUMO", "CIR-PLAS"],
+];
+
+/**
+ * Genera la plantilla CSV con el rol mensual por grupos de día. Cada grupo usa
+ * un marcador `dN-mm-yyyy`: el usuario reemplaza `d1-mm-yyyy` por la fecha del
+ * primer día (todas sus filas a la vez), `d2-mm-yyyy` por la del segundo, etc.
+ * El nombre se resuelve del catálogo (columna de referencia, ignorada al
+ * importar); si un código no está en el catálogo se usa el propio código.
  */
 export function horariosCsvTemplate(catalogo: AreaAtencion[]): string {
   const header = "codigo,nombre,fecha,horario,lugar,nota";
   const horario = "8:00am a 12:00pm";
   const lugar = "Área de Admisión";
-  // Solo las áreas con restricción participan en la carga masiva.
-  const conRestriccion = catalogo.filter((a) => !a.sin_restriccion);
-  const filas = conRestriccion.map(
-    (a) => `${a.codigo},${csvCell(a.nombre)},,${csvCell(horario)},${csvCell(lugar)},`
-  );
-  if (filas.length === 0) {
-    filas.push(`CODIGO-AREA,Nombre del área,05-10-2026,${csvCell(horario)},${csvCell(lugar)},`);
-  }
+  const nombrePorCodigo = new Map<string, string>();
+  catalogo.forEach((a) => nombrePorCodigo.set(a.codigo, a.nombre));
+
+  const filas: string[] = [];
+  PLANTILLA_GRUPOS.forEach((grupo, i) => {
+    const fecha = `d${i + 1}-mm-yyyy`;
+    grupo.forEach((codigo) => {
+      const nombre = nombrePorCodigo.get(codigo) ?? codigo;
+      filas.push(
+        `${codigo},${csvCell(nombre)},${fecha},${csvCell(horario)},${csvCell(lugar)},`
+      );
+    });
+  });
+
   return [header, ...filas].join("\n") + "\n";
 }
 
