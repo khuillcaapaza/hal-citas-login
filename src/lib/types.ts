@@ -1,6 +1,6 @@
 export interface Area {
   area: string;
-  days: string[];
+  dates: string[];
   time: string;
   location: string;
   note: string;
@@ -29,14 +29,18 @@ export interface Usuario {
 
 export interface AreaAtencion {
   id: number;
+  codigo: string;
   nombre: string;
   descripcion: string;
+  sin_restriccion: boolean;
   activo: boolean;
 }
 
 export interface AreaAtencionForm {
+  codigo: string;
   nombre: string;
   descripcion: string;
+  sin_restriccion: boolean;
   activo: boolean;
 }
 

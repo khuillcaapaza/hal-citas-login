@@ -5,6 +5,7 @@ import {
   WEEKDAY_SHORT,
   buildCalendar,
   colorMap,
+  formatFechaCorta,
   indicacionesList,
   monthLabel,
 } from "@/lib/utils";
@@ -30,14 +31,14 @@ export default function CronogramaPreview({ data }: Props) {
         <>
           <h3>Rol por área</h3>
           <p className="seccion-sub">
-            Días de la semana en que cada área entrega citas durante el mes.
+            Fechas en que cada área entrega citas durante el mes.
           </p>
           <div className="tabla-wrap">
             <table className="tabla-rol">
               <thead>
                 <tr>
                   <th>Área</th>
-                  <th>Días de entrega</th>
+                  <th>Fechas de entrega</th>
                   <th>Horario</th>
                   <th>Lugar</th>
                 </tr>
@@ -55,10 +56,10 @@ export default function CronogramaPreview({ data }: Props) {
                       {a.note && <div className="area-nota">{a.note}</div>}
                     </td>
                     <td>
-                      {a.days && a.days.length > 0
-                        ? a.days.map((d) => (
+                      {a.dates && a.dates.length > 0
+                        ? a.dates.map((d) => (
                             <span className="dia-pill" key={d}>
-                              {d}
+                              {formatFechaCorta(d)}
                             </span>
                           ))
                         : "—"}

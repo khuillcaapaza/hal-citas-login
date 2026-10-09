@@ -481,24 +481,53 @@ body {
   background: #fff;
   cursor: pointer;
 }
-.area-dias {
+.area-fechas {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
 }
-.dia-check {
+.area-fecha-input {
+  max-width: 11rem;
+}
+.area-fecha-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: #047857;
+}
+.area-fecha-add input {
+  max-width: 9rem;
+}
+.fechas-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.fecha-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.8rem;
-  background: #fff;
-  border: 1px solid var(--borde);
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #d1fae5;
   border-radius: 999px;
-  padding: 0.2rem 0.6rem;
-  cursor: pointer;
+  padding: 0.15rem 0.5rem;
 }
-.dia-check input {
-  width: auto;
+.fecha-pill__x {
+  border: none;
+  background: none;
+  color: #047857;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0;
+}
+.fecha-pill__x:hover {
+  color: #b91c1c;
 }
 
 /* Render / vista previa */

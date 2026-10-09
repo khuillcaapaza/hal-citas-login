@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createCronograma, listAreasActivas, updateCronograma } from "@/lib/api";
-import type { Area, Cronograma, CronogramaForm } from "@/lib/types";
-import { MES_REGEX, WEEKDAYS, monthLabel } from "@/lib/utils";
+import type { Area, AreaAtencion, Cronograma, CronogramaForm } from "@/lib/types";
+import {
+  MES_REGEX,
+  formatFechaCorta,
+  horariosCsvTemplate,
+  mesesEnHorariosCsv,
+  monthLabel,
+  parseHorariosCsv,
+} from "@/lib/utils";
 
 interface Props {
   initial: Cronograma | null;
@@ -13,7 +20,7 @@ interface Props {
 }
 
 function emptyArea(): Area {
-  return { area: "", days: [], time: "", location: "", note: "" };
+  return { area: "", dates: [], time: "", location: "", note: "" };
 }
 
 function toForm(c: Cronograma | null): CronogramaForm {
@@ -29,7 +36,7 @@ function toForm(c: Cronograma | null): CronogramaForm {
   }
   const areas: Area[] = (c.areas || []).map((a) => ({
     area: a.area || "",
-    days: a.days || [],
+    dates: a.dates || [],
     time: a.time || "",
     location: a.location || "",
     note: a.note || "",
@@ -56,14 +63,19 @@ export default function CronogramaEditor({
     texto: "",
   });
   const [guardando, setGuardando] = useState(false);
-  const [areasCatalogo, setAreasCatalogo] = useState<string[]>([]);
+  const [areasCatalogo, setAreasCatalogo] = useState<AreaAtencion[]>([]);
+  const [importMsg, setImportMsg] = useState<{
+    texto: string;
+    tipo?: "ok" | "error";
+  }>({ texto: "" });
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let activo = true;
     (async () => {
       try {
         const data = await listAreasActivas();
-        if (activo) setAreasCatalogo(data.map((a) => a.nombre));
+        if (activo) setAreasCatalogo(data);
       } catch {
         // El catálogo es opcional para el editor.
       }
@@ -72,6 +84,20 @@ export default function CronogramaEditor({
       activo = false;
     };
   }, []);
+
+  const nombresCatalogo = areasCatalogo.map((a) => a.nombre);
+
+  // Rango de fechas válido (primer y último día del mes del cronograma).
+  const mesActual = (editando ? initial!.mes : form.mes).trim();
+  const mesRange = (() => {
+    const m = /^(\d{4})-(\d{2})$/.exec(mesActual);
+    if (!m) return { min: "", max: "" };
+    const last = new Date(+m[1], +m[2], 0).getDate();
+    return {
+      min: `${mesActual}-01`,
+      max: `${mesActual}-${String(last).padStart(2, "0")}`,
+    };
+  })();
 
   function setField<K extends keyof CronogramaForm>(
     key: K,
@@ -87,16 +113,36 @@ export default function CronogramaEditor({
     }));
   }
 
-  function toggleDay(index: number, day: string) {
+  function addDate(index: number, iso: string) {
+    if (!iso) return;
+    setForm((f) => ({
+      ...f,
+      areas: f.areas.map((a, i) => {
+        if (i !== index || a.dates.includes(iso)) return a;
+        return { ...a, dates: [...a.dates, iso].sort() };
+      }),
+    }));
+  }
+
+  // Edita (o limpia) la fecha principal del área; el resto queda como extra.
+  function setFirstDate(index: number, iso: string) {
     setForm((f) => ({
       ...f,
       areas: f.areas.map((a, i) => {
         if (i !== index) return a;
-        const days = a.days.includes(day)
-          ? a.days.filter((d) => d !== day)
-          : [...a.days, day];
-        return { ...a, days };
+        const rest = a.dates.slice(1);
+        const next = iso ? [iso, ...rest] : rest;
+        return { ...a, dates: Array.from(new Set(next)).sort() };
       }),
+    }));
+  }
+
+  function removeDate(index: number, iso: string) {
+    setForm((f) => ({
+      ...f,
+      areas: f.areas.map((a, i) =>
+        i === index ? { ...a, dates: a.dates.filter((d) => d !== iso) } : a
+      ),
     }));
   }
 
@@ -111,6 +157,89 @@ export default function CronogramaEditor({
     });
   }
 
+  async function onImportCsv(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setImportMsg({ texto: "Procesando…" });
+    try {
+      const texto = await file.text();
+
+      // El mes lo fija la ruta (edición) o el campo; si falta, se infiere del CSV.
+      let mes = (editando ? initial!.mes : form.mes).trim();
+      let mesInferido = false;
+      if (!MES_REGEX.test(mes)) {
+        const meses = mesesEnHorariosCsv(texto);
+        if (meses.length === 0) {
+          setImportMsg({
+            texto:
+              "No se detectaron fechas válidas (usa dd-mm-yyyy) ni hay un mes indicado.",
+            tipo: "error",
+          });
+          return;
+        }
+        if (meses.length > 1) {
+          setImportMsg({
+            texto:
+              "El CSV tiene fechas de varios meses. Indica el mes del cronograma antes de importar.",
+            tipo: "error",
+          });
+          return;
+        }
+        mes = meses[0];
+        mesInferido = true;
+      }
+
+      const { areas, errors, omitidas } = parseHorariosCsv(
+        texto,
+        areasCatalogo,
+        mes
+      );
+
+      if (areas.length === 0 && errors.length > 0) {
+        setImportMsg({ texto: errors.join(" "), tipo: "error" });
+        return;
+      }
+
+      // Aplica el mes inferido (solo en cronogramas nuevos) junto con las áreas.
+      setForm((f) => ({
+        ...f,
+        mes: mesInferido ? mes : f.mes,
+        areas: areas.length ? areas : [emptyArea()],
+      }));
+
+      const partes = [`${areas.length} área(s) importada(s).`];
+      if (mesInferido) {
+        partes.push(`Mes detectado: ${monthLabel(mes)}.`);
+      }
+      if (omitidas.length > 0) {
+        partes.push(`Omitidas (atención diaria): ${omitidas.join(", ")}.`);
+      }
+      if (errors.length > 0) {
+        partes.push(`Avisos: ${errors.join(" ")}`);
+      }
+      setImportMsg({
+        texto: partes.join(" "),
+        tipo: errors.length > 0 ? "error" : "ok",
+      });
+    } catch {
+      setImportMsg({ texto: "No se pudo leer el archivo CSV.", tipo: "error" });
+    }
+  }
+
+  function descargarPlantilla() {
+    const csv = horariosCsvTemplate(areasCatalogo);
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" })
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "plantilla-horarios.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function payload(): CronogramaForm {
     return {
       mes: (editando ? initial!.mes : form.mes).trim(),
@@ -122,7 +251,7 @@ export default function CronogramaEditor({
         .filter((a) => a.area.trim() !== "")
         .map((a) => ({
           area: a.area.trim(),
-          days: a.days,
+          dates: a.dates,
           time: a.time.trim(),
           location: a.location.trim(),
           note: a.note.trim(),
@@ -213,14 +342,50 @@ export default function CronogramaEditor({
         <div className="areas-bloque">
           <div className="seccion-head">
             <h3>Áreas</h3>
-            <button
-              type="button"
-              className="boton boton--sm boton--ghost"
-              onClick={addArea}
-            >
-              + Añadir área
-            </button>
+            <div className="fila fila--acciones" style={{ margin: 0 }}>
+              <button
+                type="button"
+                className="boton boton--sm boton--ghost"
+                onClick={descargarPlantilla}
+              >
+                Descargar plantilla CSV
+              </button>
+              <button
+                type="button"
+                className="boton boton--sm boton--ghost"
+                onClick={() => fileRef.current?.click()}
+              >
+                Importar CSV
+              </button>
+              <button
+                type="button"
+                className="boton boton--sm boton--ghost"
+                onClick={addArea}
+              >
+                + Añadir área
+              </button>
+            </div>
           </div>
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            hidden
+            onChange={onImportCsv}
+          />
+
+          {importMsg.texto && (
+            <p
+              className={
+                "mensaje" + (importMsg.tipo ? " mensaje--" + importMsg.tipo : "")
+              }
+              role="status"
+              aria-live="polite"
+            >
+              {importMsg.texto}
+            </p>
+          )}
 
           {areasCatalogo.length === 0 && (
             <p className="seccion-sub">
@@ -231,7 +396,7 @@ export default function CronogramaEditor({
 
           {form.areas.map((area, i) => {
             const opciones = Array.from(
-              new Set([...areasCatalogo, ...(area.area ? [area.area] : [])])
+              new Set([...nombresCatalogo, ...(area.area ? [area.area] : [])])
             );
             return (
               <div className="area-item" key={i}>
@@ -258,17 +423,49 @@ export default function CronogramaEditor({
                     ✕
                   </button>
                 </div>
-                <div className="area-dias">
-                  {WEEKDAYS.map((dia) => (
-                    <label className="dia-check" key={dia}>
-                      <input
-                        type="checkbox"
-                        checked={area.days.includes(dia)}
-                        onChange={() => toggleDay(i, dia)}
-                      />
-                      <span>{dia}</span>
-                    </label>
+                <div className="area-fechas">
+                  <input
+                    type="date"
+                    className="area-fecha-input"
+                    min={mesRange.min}
+                    max={mesRange.max}
+                    disabled={!mesRange.min}
+                    value={area.dates[0] ?? ""}
+                    onChange={(e) => setFirstDate(i, e.target.value)}
+                  />
+                  {area.dates.slice(1).map((iso) => (
+                    <span className="fecha-pill" key={iso}>
+                      {formatFechaCorta(iso)}
+                      <button
+                        type="button"
+                        className="fecha-pill__x"
+                        aria-label={`Quitar ${formatFechaCorta(iso)}`}
+                        onClick={() => removeDate(i, iso)}
+                      >
+                        ×
+                      </button>
+                    </span>
                   ))}
+                  {mesRange.min && area.dates.length > 0 && (
+                    <label className="area-fecha-add">
+                      <span>+ fecha</span>
+                      <input
+                        type="date"
+                        min={mesRange.min}
+                        max={mesRange.max}
+                        value=""
+                        onChange={(e) => {
+                          addDate(i, e.target.value);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  )}
+                  {!mesRange.min && (
+                    <span className="seccion-sub">
+                      Indica el mes del cronograma para elegir fechas
+                    </span>
+                  )}
                 </div>
                 <div className="fila">
                   <input

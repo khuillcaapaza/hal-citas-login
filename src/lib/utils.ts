@@ -1,4 +1,4 @@
-import type { Area } from "./types";
+import type { Area, AreaAtencion } from "./types";
 
 export const WEEKDAYS = [
   "Lunes",
@@ -79,20 +79,18 @@ export function buildCalendar(mes: string, areas: Area[]): CalendarData | null {
   const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
   const leading = (new Date(year, monthIdx, 1).getDay() + 6) % 7;
 
-  const byWeekday: Record<string, Area[]> = {};
-  WEEKDAYS.forEach((w) => {
-    byWeekday[w] = [];
-  });
+  // Agrupa las áreas por fecha exacta (ISO YYYY-MM-DD).
+  const byDate: Record<string, Area[]> = {};
   areas.forEach((a) =>
-    (a.days || []).forEach((d) => {
-      if (byWeekday[d]) byWeekday[d].push(a);
+    (a.dates || []).forEach((d) => {
+      (byDate[d] ??= []).push(a);
     })
   );
 
   const cells: CalendarCell[] = [];
   for (let day = 1; day <= daysInMonth; day++) {
-    const weekday = WEEKDAYS[(new Date(year, monthIdx, day).getDay() + 6) % 7];
-    cells.push({ day, areas: byWeekday[weekday] || [] });
+    const iso = `${m[1]}-${m[2]}-${String(day).padStart(2, "0")}`;
+    cells.push({ day, areas: byDate[iso] || [] });
   }
 
   return { leading, cells };
@@ -104,4 +102,233 @@ export function indicacionesList(text: string): string[] {
     .split("\n")
     .map((l) => l.replace(/^[-*]\s*/, "").trim())
     .filter(Boolean);
+}
+
+// ── Importación de horarios por CSV ───────────────────────────────────
+
+/** Quita acentos y pasa a minúsculas para comparar de forma laxa. */
+function fold(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+/** Convierte "dd-mm-yyyy" (admite / . como separador) a ISO "yyyy-mm-dd". */
+export function parseFechaDdMmYyyy(value: string): string | null {
+  const m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/.exec(value.trim());
+  if (!m) return null;
+  const d = +m[1];
+  const mo = +m[2];
+  const y = +m[3];
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) {
+    return null;
+  }
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/** ISO "yyyy-mm-dd" → "dd/mm" para mostrar de forma compacta. */
+export function formatFechaCorta(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}` : iso;
+}
+
+/** Meses (YYYY-MM) distintos presentes en la columna `fecha` del CSV. */
+export function mesesEnHorariosCsv(text: string): string[] {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) return [];
+  const header = rows[0].map((c) => fold(c));
+  const iFecha = header.indexOf(fold("fecha"));
+  if (iFecha === -1) return [];
+  const meses = new Set<string>();
+  for (let r = 1; r < rows.length; r++) {
+    const iso = parseFechaDdMmYyyy((rows[r][iFecha] ?? "").trim());
+    if (iso) meses.add(iso.slice(0, 7));
+  }
+  return [...meses].sort();
+}
+
+/**
+ * Parser CSV mínimo que respeta comillas dobles (y "" como comilla escapada)
+ * y separadores por coma. Devuelve filas de celdas; ignora líneas vacías.
+ */
+export function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  const push = () => {
+    row.push(field);
+    field = "";
+  };
+  const endRow = () => {
+    push();
+    if (row.some((c) => c.trim() !== "")) rows.push(row);
+    row = [];
+  };
+
+  const src = text.replace(/\r\n?/g, "\n");
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      push();
+    } else if (ch === "\n") {
+      endRow();
+    } else {
+      field += ch;
+    }
+  }
+  if (field !== "" || row.length) endRow();
+
+  return rows;
+}
+
+export interface HorariosCsvResult {
+  areas: Area[];
+  errors: string[];
+  /** Códigos de áreas omitidas por atender todos los días (sin_restriccion). */
+  omitidas: string[];
+}
+
+/**
+ * Convierte el contenido de un CSV en una lista de áreas del cronograma.
+ *
+ * Columnas (encabezado obligatorio, sin distinción de tildes/mayúsculas):
+ *   codigo, fecha, horario, lugar, nota
+ * Una columna `nombre` extra (si existe) se ignora: es solo de referencia.
+ * `fecha` va en formato dd-mm-yyyy y debe pertenecer al mes del cronograma.
+ * Cada fila liga un área (por `codigo`) a una fecha; varias filas con el mismo
+ * código acumulan fechas. Las áreas marcadas como `sin_restriccion` (atención
+ * diaria) se omiten: su cupo no se gestiona por fecha.
+ */
+export function parseHorariosCsv(
+  text: string,
+  catalogo: AreaAtencion[],
+  mes: string
+): HorariosCsvResult {
+  const rows = parseCsvRows(text);
+  if (rows.length === 0) {
+    return { areas: [], errors: ["El archivo está vacío."], omitidas: [] };
+  }
+
+  const header = rows[0].map((c) => fold(c));
+  const col = (name: string) => header.indexOf(fold(name));
+  const iCodigo = col("codigo");
+  const iFecha = col("fecha");
+  const iHorario = col("horario");
+  const iLugar = col("lugar");
+  const iNota = col("nota");
+
+  if (iCodigo === -1 || iFecha === -1) {
+    return {
+      areas: [],
+      errors: [
+        "El encabezado debe incluir al menos las columnas «codigo» y «fecha».",
+      ],
+      omitidas: [],
+    };
+  }
+
+  const porCodigo = new Map<string, AreaAtencion>();
+  catalogo.forEach((a) => porCodigo.set(fold(a.codigo), a));
+
+  // Agrega las filas por área: cada código acumula sus fechas.
+  const porArea = new Map<string, Area>();
+  const errors: string[] = [];
+  const omitidas: string[] = [];
+
+  for (let r = 1; r < rows.length; r++) {
+    const fila = rows[r];
+    const linea = r + 1;
+    const codigo = (fila[iCodigo] ?? "").trim();
+    if (codigo === "") continue;
+
+    const area = porCodigo.get(fold(codigo));
+    if (!area) {
+      errors.push(`Línea ${linea}: no existe un área con el código «${codigo}».`);
+      continue;
+    }
+
+    // Las áreas de atención diaria no se gestionan por fecha: se omiten.
+    if (area.sin_restriccion) {
+      if (!omitidas.includes(area.codigo)) omitidas.push(area.codigo);
+      continue;
+    }
+
+    const fechaRaw = (fila[iFecha] ?? "").trim();
+    const iso = parseFechaDdMmYyyy(fechaRaw);
+    if (iso === null) {
+      errors.push(`Línea ${linea}: fecha no válida «${fechaRaw}» (usa dd-mm-yyyy).`);
+      continue;
+    }
+    if (iso.slice(0, 7) !== mes) {
+      errors.push(`Línea ${linea}: la fecha «${fechaRaw}» no pertenece al mes del cronograma.`);
+      continue;
+    }
+
+    const key = fold(area.codigo);
+    let entry = porArea.get(key);
+    if (!entry) {
+      entry = {
+        area: area.nombre,
+        dates: [],
+        time: (fila[iHorario] ?? "").trim(),
+        location: (fila[iLugar] ?? "").trim(),
+        note: (fila[iNota] ?? "").trim(),
+      };
+      porArea.set(key, entry);
+    } else {
+      // Completa horario/lugar/nota si vienen en una fila posterior.
+      if (!entry.time) entry.time = (fila[iHorario] ?? "").trim();
+      if (!entry.location) entry.location = (fila[iLugar] ?? "").trim();
+      if (!entry.note) entry.note = (fila[iNota] ?? "").trim();
+    }
+    if (!entry.dates.includes(iso)) entry.dates.push(iso);
+  }
+
+  const areas = [...porArea.values()];
+  areas.forEach((a) => a.dates.sort());
+
+  return { areas, errors, omitidas };
+}
+
+/**
+ * Genera la plantilla CSV con TODAS las áreas registradas que participan en la
+ * carga masiva (activas y con restricción). Pre-rellena `codigo` y `nombre`
+ * (columna de referencia, ignorada al importar) para que el usuario solo tenga
+ * que completar la fecha (y el horario) de cada fila.
+ */
+export function horariosCsvTemplate(catalogo: AreaAtencion[]): string {
+  const header = "codigo,nombre,fecha,horario,lugar,nota";
+  const horario = "8:00am a 12:00pm";
+  const lugar = "Área de Admisión";
+  // Solo las áreas con restricción participan en la carga masiva.
+  const conRestriccion = catalogo.filter((a) => !a.sin_restriccion);
+  const filas = conRestriccion.map(
+    (a) => `${a.codigo},${csvCell(a.nombre)},,${csvCell(horario)},${csvCell(lugar)},`
+  );
+  if (filas.length === 0) {
+    filas.push(`CODIGO-AREA,Nombre del área,05-10-2026,${csvCell(horario)},${csvCell(lugar)},`);
+  }
+  return [header, ...filas].join("\n") + "\n";
+}
+
+/** Escapa una celda para CSV si contiene comas, comillas o saltos de línea. */
+function csvCell(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }

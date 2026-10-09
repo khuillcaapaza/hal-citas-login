@@ -10,8 +10,10 @@ import {
 import type { AreaAtencion, AreaAtencionForm } from "@/lib/types";
 
 const FORM_VACIO: AreaAtencionForm = {
+  codigo: "",
   nombre: "",
   descripcion: "",
+  sin_restriccion: false,
   activo: true,
 };
 
@@ -58,8 +60,10 @@ export default function AreasManager() {
   function editar(area: AreaAtencion) {
     setEditId(area.id);
     setForm({
+      codigo: area.codigo,
       nombre: area.nombre,
       descripcion: area.descripcion,
+      sin_restriccion: area.sin_restriccion,
       activo: area.activo,
     });
     setFormMsg({ texto: "" });
@@ -86,13 +90,29 @@ export default function AreasManager() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const datos: AreaAtencionForm = {
+      codigo: form.codigo.trim().toUpperCase(),
       nombre: form.nombre.trim(),
       descripcion: form.descripcion.trim(),
+      sin_restriccion: form.sin_restriccion,
       activo: form.activo,
     };
     if (!datos.nombre) {
       setFormMsg({ texto: "El nombre del área es obligatorio.", tipo: "error" });
       return;
+    }
+    if (editId === null) {
+      if (!datos.codigo) {
+        setFormMsg({ texto: "El código del área es obligatorio.", tipo: "error" });
+        return;
+      }
+      if (!/^[A-Z0-9-]{2,40}$/.test(datos.codigo)) {
+        setFormMsg({
+          texto:
+            "El código solo admite letras, números y guiones (2 a 40 caracteres).",
+          tipo: "error",
+        });
+        return;
+      }
     }
 
     setGuardando(true);
@@ -127,6 +147,24 @@ export default function AreasManager() {
 
         <form onSubmit={onSubmit} autoComplete="off" noValidate>
           <label className="campo">
+            <span>Código {editId !== null && "(no editable)"}</span>
+            <input
+              type="text"
+              maxLength={40}
+              required
+              disabled={editId !== null}
+              placeholder="Ej. CARDIO-RQ"
+              value={form.codigo}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  codigo: e.target.value.toUpperCase(),
+                }))
+              }
+            />
+          </label>
+
+          <label className="campo">
             <span>Nombre</span>
             <input
               type="text"
@@ -149,6 +187,17 @@ export default function AreasManager() {
                 setForm((f) => ({ ...f, descripcion: e.target.value }))
               }
             />
+          </label>
+
+          <label className="campo campo--check">
+            <input
+              type="checkbox"
+              checked={form.sin_restriccion}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, sin_restriccion: e.target.checked }))
+              }
+            />
+            <span>Atiende todos los días (se omite en la carga masiva)</span>
           </label>
 
           <label className="campo campo--check">
@@ -230,6 +279,12 @@ export default function AreasManager() {
                   <span className="chip chip--off">Inactiva</span>
                 )}
               </div>
+              {a.codigo && (
+                <p className="seccion-sub" style={{ margin: "4px 0 0" }}>
+                  <code>{a.codigo}</code>
+                  {a.sin_restriccion && " · todos los días"}
+                </p>
+              )}
               {a.descripcion && <p>{a.descripcion}</p>}
               <div className="cron-card__acciones">
                 <button

@@ -4,13 +4,29 @@ import {
   colorMap,
   buildCalendar,
   indicacionesList,
+  parseFechaDdMmYyyy,
+  formatFechaCorta,
+  mesesEnHorariosCsv,
+  parseCsvRows,
+  parseHorariosCsv,
+  horariosCsvTemplate,
   PALETTE,
 } from "../src/lib/utils";
-import type { Area } from "../src/lib/types";
+import type { Area, AreaAtencion } from "../src/lib/types";
+
+const areaAtencion = (over: Partial<AreaAtencion> = {}): AreaAtencion => ({
+  id: 1,
+  codigo: "GINE",
+  nombre: "Ginecología",
+  descripcion: "",
+  sin_restriccion: false,
+  activo: true,
+  ...over,
+});
 
 const area = (over: Partial<Area> = {}): Area => ({
   area: "Cardiología",
-  days: ["Lunes"],
+  dates: ["2026-07-06"],
   time: "08:00",
   location: "Piso 1",
   note: "",
@@ -52,21 +68,22 @@ describe("buildCalendar", () => {
     expect(buildCalendar("malo", [])).toBeNull();
   });
 
-  it("construye celdas y asigna áreas por día", () => {
+  it("construye celdas y asigna áreas por fecha", () => {
     const areas = [
-      area({ area: "Cardio", days: ["Lunes", "DiaInexistente"] }),
-      area({ area: "SinDias", days: undefined as unknown as string[] }),
+      area({ area: "Cardio", dates: ["2026-07-06", "2026-07-20"] }),
+      area({ area: "SinFechas", dates: undefined as unknown as string[] }),
     ];
     const cal = buildCalendar("2026-07", areas);
     expect(cal).not.toBeNull();
     // Julio 2026 tiene 31 días.
     expect(cal!.cells).toHaveLength(31);
     expect(typeof cal!.leading).toBe("number");
-    // Algún lunes debe incluir el área "Cardio".
-    const conCardio = cal!.cells.some((c) =>
-      c.areas.some((a) => a.area === "Cardio")
-    );
-    expect(conCardio).toBe(true);
+    // El día 6 debe incluir el área "Cardio".
+    const dia6 = cal!.cells.find((c) => c.day === 6);
+    expect(dia6!.areas.some((a) => a.area === "Cardio")).toBe(true);
+    // El día 7 no tiene áreas.
+    const dia7 = cal!.cells.find((c) => c.day === 7);
+    expect(dia7!.areas).toHaveLength(0);
   });
 });
 
@@ -81,5 +98,145 @@ describe("indicacionesList", () => {
 
   it("devuelve [] con texto vacío", () => {
     expect(indicacionesList("")).toEqual([]);
+  });
+});
+
+describe("parseFechaDdMmYyyy", () => {
+  it("convierte dd-mm-yyyy a ISO", () => {
+    expect(parseFechaDdMmYyyy("06-07-2026")).toBe("2026-07-06");
+    expect(parseFechaDdMmYyyy("6/7/2026")).toBe("2026-07-06");
+  });
+
+  it("devuelve null para fechas inválidas", () => {
+    expect(parseFechaDdMmYyyy("31-02-2026")).toBeNull();
+    expect(parseFechaDdMmYyyy("2026-07-06")).toBeNull();
+    expect(parseFechaDdMmYyyy("xx")).toBeNull();
+  });
+
+  it("formatea fecha corta dd/mm", () => {
+    expect(formatFechaCorta("2026-07-06")).toBe("06/07");
+  });
+});
+
+describe("mesesEnHorariosCsv", () => {
+  it("detecta un único mes", () => {
+    const csv = "codigo,fecha\nGINE,05-10-2026\nCARDIO,09-10-2026";
+    expect(mesesEnHorariosCsv(csv)).toEqual(["2026-10"]);
+  });
+
+  it("detecta varios meses", () => {
+    const csv = "codigo,fecha\nGINE,05-10-2026\nCARDIO,03-11-2026";
+    expect(mesesEnHorariosCsv(csv)).toEqual(["2026-10", "2026-11"]);
+  });
+
+  it("devuelve [] si no hay columna fecha o fechas válidas", () => {
+    expect(mesesEnHorariosCsv("codigo\nGINE")).toEqual([]);
+    expect(mesesEnHorariosCsv("codigo,fecha\nGINE,xx")).toEqual([]);
+  });
+});
+
+describe("parseCsvRows", () => {
+  it("respeta comillas con comas y comillas escapadas", () => {
+    const rows = parseCsvRows('a,"b,c","d""e"\nf,g,h');
+    expect(rows).toEqual([
+      ["a", "b,c", 'd"e'],
+      ["f", "g", "h"],
+    ]);
+  });
+
+  it("ignora líneas vacías", () => {
+    expect(parseCsvRows("a,b\n\n\nc,d")).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+  });
+});
+
+describe("parseHorariosCsv", () => {
+  const catalogo: AreaAtencion[] = [
+    areaAtencion({ codigo: "GINE", nombre: "Ginecología" }),
+    areaAtencion({ id: 2, codigo: "CARDIO", nombre: "Cardiología" }),
+    areaAtencion({
+      id: 3,
+      codigo: "PED",
+      nombre: "Pediatría",
+      sin_restriccion: true,
+    }),
+  ];
+
+  it("resuelve códigos a nombres y acumula fechas del mes", () => {
+    const csv =
+      "codigo,fecha,horario,lugar,nota\nGINE,06-07-2026,08:00 a 12:00,Admisión,sin nota\nGINE,20-07-2026,,,";
+    const { areas, errors, omitidas } = parseHorariosCsv(csv, catalogo, "2026-07");
+
+    expect(errors).toEqual([]);
+    expect(omitidas).toEqual([]);
+    expect(areas).toHaveLength(1);
+    expect(areas[0].area).toBe("Ginecología");
+    expect(areas[0].dates).toEqual(["2026-07-06", "2026-07-20"]);
+    expect(areas[0].time).toBe("08:00 a 12:00");
+  });
+
+  it("reporta fechas fuera del mes del cronograma", () => {
+    const csv = "codigo,fecha\nGINE,06-08-2026";
+    const { areas, errors } = parseHorariosCsv(csv, catalogo, "2026-07");
+
+    expect(areas).toHaveLength(0);
+    expect(errors[0]).toContain("no pertenece");
+  });
+
+  it("reporta fechas con formato inválido", () => {
+    const csv = "codigo,fecha\nGINE,2026-07-06";
+    const { errors } = parseHorariosCsv(csv, catalogo, "2026-07");
+    expect(errors[0]).toContain("no válida");
+  });
+
+  it("omite áreas de atención diaria (sin_restriccion)", () => {
+    const csv = "codigo,fecha\nPED,06-07-2026";
+    const { areas, omitidas } = parseHorariosCsv(csv, catalogo, "2026-07");
+
+    expect(areas).toHaveLength(0);
+    expect(omitidas).toEqual(["PED"]);
+  });
+
+  it("reporta códigos inexistentes", () => {
+    const csv = "codigo,fecha\nXXX,06-07-2026";
+    const { areas, errors } = parseHorariosCsv(csv, catalogo, "2026-07");
+
+    expect(areas).toHaveLength(0);
+    expect(errors[0]).toContain("XXX");
+  });
+
+  it("exige las columnas codigo y fecha", () => {
+    const { errors } = parseHorariosCsv("foo,bar\n1,2", catalogo, "2026-07");
+    expect(errors[0]).toContain("codigo");
+  });
+});
+
+describe("horariosCsvTemplate", () => {
+  it("incluye todas las áreas con restricción y excluye las diarias", () => {
+    const csv = horariosCsvTemplate([
+      areaAtencion({ codigo: "GINE", nombre: "Ginecología" }),
+      areaAtencion({ id: 2, codigo: "CARDIO", nombre: "Cardiología" }),
+      areaAtencion({
+        id: 3,
+        codigo: "PED",
+        nombre: "Pediatría",
+        sin_restriccion: true,
+      }),
+    ]);
+    const filas = csv.trim().split("\n");
+    // Encabezado + 2 áreas con restricción (la diaria se excluye).
+    expect(filas).toHaveLength(3);
+    expect(csv).toContain("GINE,Ginecología");
+    expect(csv).toContain("CARDIO,Cardiología");
+    expect(csv).not.toContain("PED");
+  });
+
+  it("incluye horario y lugar por defecto", () => {
+    const csv = horariosCsvTemplate([areaAtencion({ codigo: "GINE" })]);
+    expect(csv.split("\n")[0]).toBe("codigo,nombre,fecha,horario,lugar,nota");
+    expect(csv).toContain("8:00am a 12:00pm");
+    expect(csv).toContain("Área de Admisión");
   });
 });
