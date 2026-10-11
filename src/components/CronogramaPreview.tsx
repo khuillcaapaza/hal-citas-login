@@ -110,6 +110,20 @@ export default function CronogramaPreview({ data }: Props) {
         </>
       )}
 
+      {(data.sinRestriccion?.length ?? 0) > 0 && (
+        <>
+          <h3 style={{ marginTop: "2rem" }}>
+            {data.tituloSinRestriccion ||
+              "Especialidades con la entrega de cupos todos los días"}
+          </h3>
+          <ul className="indicaciones">
+            {data.sinRestriccion!.map((nombre) => (
+              <li key={nombre}>{nombre}</li>
+            ))}
+          </ul>
+        </>
+      )}
+
       {indicaciones.length > 0 && (
         <>
           <h3 style={{ marginTop: "2rem" }}>Indicaciones generales</h3>

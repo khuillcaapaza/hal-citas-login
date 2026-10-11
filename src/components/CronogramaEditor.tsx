@@ -30,6 +30,7 @@ function toForm(c: Cronograma | null): CronogramaForm {
       titulo: "",
       excerpt: "",
       indicaciones: "",
+      tituloSinRestriccion: "",
       publicado: true,
       areas: [emptyArea()],
     };
@@ -46,6 +47,7 @@ function toForm(c: Cronograma | null): CronogramaForm {
     titulo: c.titulo || "",
     excerpt: c.excerpt || "",
     indicaciones: c.indicaciones || "",
+    tituloSinRestriccion: c.tituloSinRestriccion || "",
     publicado: !!c.publicado,
     areas: areas.length ? areas : [emptyArea()],
   };
@@ -86,6 +88,8 @@ export default function CronogramaEditor({
   }, []);
 
   const nombresCatalogo = areasCatalogo.map((a) => a.nombre);
+  // Áreas de atención diaria (configuradas con sin_restriccion en el catálogo).
+  const areasSinRestriccion = areasCatalogo.filter((a) => a.sin_restriccion);
 
   // Rango de fechas válido (primer y último día del mes del cronograma).
   const mesActual = (editando ? initial!.mes : form.mes).trim();
@@ -246,6 +250,7 @@ export default function CronogramaEditor({
       titulo: form.titulo.trim(),
       excerpt: form.excerpt.trim(),
       indicaciones: form.indicaciones.trim(),
+      tituloSinRestriccion: form.tituloSinRestriccion.trim(),
       publicado: form.publicado,
       areas: form.areas
         .filter((a) => a.area.trim() !== "")
@@ -507,6 +512,36 @@ export default function CronogramaEditor({
           />
         </label>
 
+        <div className="areas-bloque">
+          <label className="campo">
+            <span>Título de la sección de cupos todos los días</span>
+            <input
+              type="text"
+              maxLength={200}
+              placeholder="Especialidades con la entrega de cupos todos los días"
+              value={form.tituloSinRestriccion}
+              onChange={(e) => setField("tituloSinRestriccion", e.target.value)}
+            />
+          </label>
+          <p className="seccion-sub">
+            Áreas que atienden todos los días. Se toman del catálogo (marca
+            “atiende todos los días”); para cambiarlas, edítalas en “Áreas de
+            atención”.
+          </p>
+          <div className="diarias-lista">
+            {areasSinRestriccion.length === 0 ? (
+              <span className="seccion-sub">No hay áreas de atención diaria.</span>
+            ) : (
+              areasSinRestriccion.map((a) => (
+                <label className="diaria-check" key={a.id}>
+                  <input type="checkbox" checked disabled readOnly />
+                  <span>{a.nombre}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+
         <div className="fila fila--acciones">
           <button type="submit" className="boton" disabled={guardando}>
             Guardar
@@ -521,7 +556,12 @@ export default function CronogramaEditor({
           <button
             type="button"
             className="boton boton--ghost"
-            onClick={() => onPreview(payload())}
+            onClick={() =>
+              onPreview({
+                ...payload(),
+                sinRestriccion: areasSinRestriccion.map((a) => a.nombre),
+              })
+            }
           >
             Vista previa
           </button>

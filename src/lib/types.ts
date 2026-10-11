@@ -16,7 +16,10 @@ export interface CronogramaMeta {
 
 export interface Cronograma extends CronogramaMeta {
   indicaciones: string;
+  tituloSinRestriccion: string;
   areas: Area[];
+  /** Nombres de áreas de atención diaria (derivadas del catálogo). */
+  sinRestriccion?: string[];
   actualizado?: string;
 }
 
@@ -63,6 +66,9 @@ export interface CronogramaForm {
   titulo: string;
   excerpt: string;
   indicaciones: string;
+  tituloSinRestriccion: string;
   publicado: boolean;
   areas: Area[];
+  /** Solo para la vista previa: nombres de áreas de atención diaria. */
+  sinRestriccion?: string[];
 }
