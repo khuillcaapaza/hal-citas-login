@@ -353,3 +353,40 @@ export function horariosCsvTemplate(catalogo: AreaAtencion[]): string {
 function csvCell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
+
+/**
+ * Combina áreas existentes con las importadas sin sobreescribir: un área que ya
+ * existe (mismo nombre) acumula las fechas nuevas (sin duplicar) y completa
+ * horario/lugar/nota solo si estaban vacíos; las áreas nuevas se agregan. Los
+ * placeholders sin nombre del formulario se descartan.
+ */
+export function mergeAreas(existing: Area[], imported: Area[]): Area[] {
+  const out: Area[] = [];
+  const porNombre = new Map<string, Area>();
+
+  for (const a of existing) {
+    if (a.area.trim() === "") continue;
+    const copia: Area = { ...a, dates: [...a.dates] };
+    out.push(copia);
+    porNombre.set(a.area, copia);
+  }
+
+  for (const imp of imported) {
+    const found = porNombre.get(imp.area);
+    if (found) {
+      for (const d of imp.dates) {
+        if (!found.dates.includes(d)) found.dates.push(d);
+      }
+      found.dates.sort();
+      if (!found.time) found.time = imp.time;
+      if (!found.location) found.location = imp.location;
+      if (!found.note) found.note = imp.note;
+    } else {
+      const copia: Area = { ...imp, dates: [...imp.dates].sort() };
+      out.push(copia);
+      porNombre.set(imp.area, copia);
+    }
+  }
+
+  return out;
+}

@@ -7,6 +7,7 @@ import {
   MES_REGEX,
   formatFechaCorta,
   horariosCsvTemplate,
+  mergeAreas,
   mesesEnHorariosCsv,
   monthLabel,
   parseHorariosCsv,
@@ -206,14 +207,18 @@ export default function CronogramaEditor({
         return;
       }
 
-      // Aplica el mes inferido (solo en cronogramas nuevos) junto con las áreas.
-      setForm((f) => ({
-        ...f,
-        mes: mesInferido ? mes : f.mes,
-        areas: areas.length ? areas : [emptyArea()],
-      }));
+      // Combina con las áreas ya cargadas (no sobreescribe); aplica el mes
+      // inferido solo en cronogramas nuevos.
+      setForm((f) => {
+        const combinadas = mergeAreas(f.areas, areas);
+        return {
+          ...f,
+          mes: mesInferido ? mes : f.mes,
+          areas: combinadas.length ? combinadas : [emptyArea()],
+        };
+      });
 
-      const partes = [`${areas.length} área(s) importada(s).`];
+      const partes = [`${areas.length} área(s) importada(s) y combinada(s).`];
       if (mesInferido) {
         partes.push(`Mes detectado: ${monthLabel(mes)}.`);
       }

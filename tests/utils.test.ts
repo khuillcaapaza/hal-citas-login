@@ -10,6 +10,7 @@ import {
   parseCsvRows,
   parseHorariosCsv,
   horariosCsvTemplate,
+  mergeAreas,
   PALETTE,
 } from "../src/lib/utils";
 import type { Area, AreaAtencion } from "../src/lib/types";
@@ -278,5 +279,65 @@ describe("horariosCsvTemplate", () => {
   it("usa el código como nombre si no está en el catálogo", () => {
     const csv = horariosCsvTemplate([]);
     expect(csv).toContain("GINE,GINE,d1-mm-yyyy");
+  });
+});
+
+describe("mergeAreas", () => {
+  it("acumula fechas de un área existente sin duplicar y ordenadas", () => {
+    const existing = [area({ area: "Cardiología", dates: ["2026-10-05", "2026-10-09"] })];
+    const imported = [area({ area: "Cardiología", dates: ["2026-10-12", "2026-10-05"] })];
+
+    const merged = mergeAreas(existing, imported);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].dates).toEqual(["2026-10-05", "2026-10-09", "2026-10-12"]);
+  });
+
+  it("agrega áreas nuevas y conserva las existentes", () => {
+    const existing = [area({ area: "Cardiología", dates: ["2026-10-05"] })];
+    const imported = [area({ area: "Ginecología", dates: ["2026-10-14"] })];
+
+    const merged = mergeAreas(existing, imported);
+
+    expect(merged.map((a) => a.area)).toEqual(["Cardiología", "Ginecología"]);
+  });
+
+  it("completa horario/lugar/nota solo si estaban vacíos", () => {
+    const existing = [
+      area({ area: "Cardiología", dates: ["2026-10-05"], time: "", location: "", note: "" }),
+    ];
+    const imported = [
+      area({ area: "Cardiología", dates: ["2026-10-12"], time: "9:00", location: "M2", note: "ojo" }),
+    ];
+
+    const merged = mergeAreas(existing, imported);
+
+    expect(merged[0].time).toBe("9:00");
+    expect(merged[0].location).toBe("M2");
+    expect(merged[0].note).toBe("ojo");
+  });
+
+  it("no sobreescribe horario/lugar/nota existentes", () => {
+    const existing = [
+      area({ area: "Cardiología", dates: ["2026-10-05"], time: "8:00", location: "M1", note: "a" }),
+    ];
+    const imported = [
+      area({ area: "Cardiología", dates: ["2026-10-12"], time: "9:00", location: "M2", note: "b" }),
+    ];
+
+    const merged = mergeAreas(existing, imported);
+
+    expect(merged[0].time).toBe("8:00");
+    expect(merged[0].location).toBe("M1");
+    expect(merged[0].note).toBe("a");
+  });
+
+  it("descarta placeholders sin nombre del formulario", () => {
+    const existing = [area({ area: "", dates: [] })];
+    const imported = [area({ area: "Ginecología", dates: ["2026-10-14"] })];
+
+    const merged = mergeAreas(existing, imported);
+
+    expect(merged.map((a) => a.area)).toEqual(["Ginecología"]);
   });
 });
